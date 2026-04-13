@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: ankane/pgvector:v0.5.1
+    container_name: autoresearch-db
+    environment:
+      POSTGRES_DB: autoresearch
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ar_password_2026
+    ports:
+      - "5434:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: autoresearch-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --requirepass ar_redis_2026
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "ar_redis_2026", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: autoresearch-api
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:ar_password_2026@postgres:5432/autoresearch}
+      REDIS_URL: redis://:ar_redis_2026@redis:6379
+      KYMA_API_KEY: ${KYMA_API_KEY:?KYMA_API_KEY is required}
+      KYMA_BASE_URL: ${KYMA_BASE_URL:-https://kymaapi.com/v1}
+      PORT: 3001
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgvector_data:
+  redis_data:
