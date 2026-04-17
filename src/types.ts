@@ -7,7 +7,8 @@ export type AgentName =
   | "coder"
   | "analyst"
   | "writer"
-  | "reviewer";
+  | "reviewer"
+  | "graph-builder";
 
 export type MessageType =
   | "TASK" | "RESULT" | "ASK" | "ANSWER"

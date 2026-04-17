@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import pino from "pino";
 import { analyzeProposal } from "./hub/proposal.ts";
 import { graphQuery } from "./hub/graph.ts";
-import { getSessionFindings } from "./hub/queries.ts";
+import { getSessionFindings, getHubStats } from "./hub/queries.ts";
 import {
   getSessionEvents,
   subscribeSessionEvents,
@@ -315,6 +315,16 @@ app.get("/api/status", (_req, res) => {
   });
 });
 
+// ─── Knowledge Hub Stats ───────────────────────────────────────────────────────
+
+app.get("/api/hub/stats", async (_req, res) => {
+  const stats = await getHubStats();
+  res.json({
+    ...stats,
+    uptime: process.uptime(),
+  });
+});
+
 // ─── Graph Knowledge ───────────────────────────────────────────────────────────
 
 app.get("/api/graph", async (_req, res) => {
@@ -390,14 +400,16 @@ app.post("/api/proposal/analyze", async (req, res) => {
 
     if (contentType.includes("multipart/form-data")) {
       // ── Multipart: parse with formidable ───────────────────────────────
-      const form = formidable({ maxFileSize: 20 * 1024 * 1024, disableNative: true }); // 20MB
-      const parseResult = await new Promise<{ fields: Record<string, formidable.FormidableField>; files: Record<string, formidable.FormidableFile | formidable.FormidableFile[]> }>((resolve, reject) => {
+      const form = formidable({ maxFileSize: 20 * 1024 * 1024 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parseResult = await new Promise<any>((resolve, reject) => {
         form.parse(req, (err, fields, files) => {
           if (err) reject(err);
           else resolve({ fields, files });
         });
       });
-      const { fields, files } = parseResult;
+      const fields = parseResult.fields as Record<string, string | string[]>;
+      const files = parseResult.files as Record<string, Record<string, unknown> | Record<string, unknown>[]>;
 
       // Priority 1: text field from form
       const rawField = fields["text"];
@@ -407,8 +419,8 @@ app.post("/api/proposal/analyze", async (req, res) => {
       // Priority 2: extract text from uploaded file
       if (!text.trim()) {
         const rawFile = files["file"];
-        const fileEntry = Array.isArray(rawFile) ? rawFile[0] : (rawFile ?? undefined);
-        if (fileEntry?.filepath) {
+        const fileEntry = (Array.isArray(rawFile) ? rawFile[0] : rawFile) as Record<string, string> | undefined;
+        if (fileEntry && typeof fileEntry.filepath === "string" && fileEntry.filepath) {
           try {
             const fs = await import("fs");
             text = fs.readFileSync(fileEntry.filepath, "utf-8").slice(0, 50_000);

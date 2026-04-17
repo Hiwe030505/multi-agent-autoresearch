@@ -7,6 +7,7 @@
 
 import pg from "pg";
 import { config } from "../config.ts";
+import { sessionGetFindings } from "./redis.ts";
 import type { Finding, Insight, InsightType, SourceType, GraphNode, GraphEdge } from "../types.ts";
 
 const { Pool } = pg;
@@ -261,8 +262,60 @@ export async function searchFindingsByText(
   }
 }
 
-export async function getFindingsBySession(_sessionId: string): Promise<Finding[]> {
-  return [];
+export async function getFindingsBySession(sessionId: string): Promise<Finding[]> {
+  try {
+    // Step 1: Try to get finding IDs from Redis (fast path)
+    const findingIds = await sessionGetFindings(sessionId);
+    if (findingIds.length > 0) {
+      return getFindingsByIds(findingIds);
+    }
+
+    // Step 2: Fallback — query agent_outputs table for stored finding data
+    const p = getPool();
+    const { rows } = await p.query<{
+      id: string; topic: string; source_url: string; source_type: string;
+      title: string; content: string; summary: string;
+      confidence: number; created_by: string; created_at: Date;
+      verified: boolean; tags: string[];
+    }>(
+      `SELECT content FROM agent_outputs
+       WHERE session_id = $1 AND output_type = 'result'
+       ORDER BY created_at ASC
+       LIMIT 1`,
+      [sessionId],
+    );
+
+    if (rows.length > 0) {
+      try {
+        const parsed = JSON.parse(rows[0].content);
+        if (Array.isArray(parsed)) {
+          // Content is a JSON array of findings
+          return parsed.map((f: Record<string, unknown>) => ({
+            id: f.id as string,
+            topic: f.topic as string,
+            sourceUrl: f.sourceUrl as string | undefined,
+            sourceType: (f.sourceType as SourceType) ?? "web",
+            title: f.title as string,
+            content: f.content as string,
+            summary: f.summary as string | undefined,
+            confidence: (f.confidence as number) ?? 0.5,
+            createdBy: (f.createdBy as string) as Finding["createdBy"],
+            createdAt: f.createdAt as string,
+            verified: Boolean(f.verified),
+            verifiedBy: undefined,
+            tags: (f.tags as string[]) ?? [],
+          }));
+        }
+      } catch {
+        // parse failed — return []
+      }
+    }
+
+    return [];
+  } catch (e) {
+    console.warn("[DB] getFindingsBySession failed:", (e as Error).message);
+    return [];
+  }
 }
 
 export async function getFindingsByIds(ids: string[]): Promise<Finding[]> {
@@ -642,7 +695,7 @@ export async function getFullGraph(limit = 500): Promise<{
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function rowToFinding(row: {
+export function rowToFinding(row: {
   id: string; topic: string; source_url: string; source_type: string;
   title: string; content: string; summary: string;
   confidence: number; created_by: string; created_at: Date;
@@ -660,7 +713,7 @@ function rowToFinding(row: {
   };
 }
 
-function rowToGraphNode(row: {
+export function rowToGraphNode(row: {
   id: string; type: string; name: string; summary: string;
   metadata: Record<string, unknown>; tags: string[];
   confidence: number; created_at: Date;

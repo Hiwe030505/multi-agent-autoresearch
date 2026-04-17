@@ -167,9 +167,10 @@ function resolveModel(
   if (forcedProvider) return { model: input, provider: forcedProvider };
 
   const shortcuts: Record<string, { model: string; provider: LLMProvider }> = {
-    // Kyma
-    "qwen-3.6-plus": { model: "qwen-3.6-plus", provider: "kyma" },
     // Anthropic
+    "claude-opus-4-6": { model: "claude-opus-4-6", provider: "anthropic" },
+    "claude-sonnet-4-6": { model: "claude-sonnet-4-6", provider: "anthropic" },
+    "claude-haiku-4-7": { model: "claude-haiku-4-7", provider: "anthropic" },
     "opus": { model: "claude-opus-4-6", provider: "anthropic" },
     "sonnet": { model: "claude-sonnet-4-6", provider: "anthropic" },
     "haiku": { model: "claude-haiku-4-7", provider: "anthropic" },
@@ -183,15 +184,16 @@ function resolveModel(
     "o3-mini": { model: "o3-mini", provider: "openai" },
     // Groq
     "llama-3.3-70b": { model: "llama-3.3-70b-versatile", provider: "groq" },
+    "llama-3.1-70b": { model: "llama-3.1-70b-versatile", provider: "groq" },
     "mixtral": { model: "mixtral-8x7b-32768", provider: "groq" },
+    "gemma2-9b": { model: "gemma2-9b-it", provider: "groq" },
     // Kyma
     "qwen-3.6-plus": { model: "qwen-3.6-plus", provider: "kyma" },
     "qwen-3-32b": { model: "qwen-3-32b", provider: "kyma" },
     "qwen-3-coder": { model: "qwen-3-coder", provider: "kyma" },
     "qwen-3-235b-cerebras": { model: "qwen-3-235b-cerebras", provider: "kyma" },
-    "claude-opus-4-6": { model: "claude-opus-4-6", provider: "kyma" },
     "gemini-2.5-flash": { model: "gemini-2.5-flash", provider: "kyma" },
-    "llama-3.3-70b": { model: "llama-3.3-70b", provider: "kyma" },
+    "llama-3.3-70b-kyma": { model: "llama-3.3-70b", provider: "kyma" },
     "gemma-4-31b": { model: "gemma-4-31b", provider: "kyma" },
     // Ollama / LMStudio
     "llama3.2": { model: "llama3.2", provider: "ollama" },

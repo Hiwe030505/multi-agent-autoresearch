@@ -40,6 +40,7 @@ import {
   emitThinking,
   emitInsight,
 } from "../hub/events.ts";
+import { reviewInsights } from "./reviewer.ts";
 import type {
   Task,
   Finding,
@@ -165,7 +166,7 @@ export async function runResearchPipeline(
           const { analyzeFindings } = await import("./analyst.ts");
           const analysis = await analyzeFindings(sources);
           emitAgentComplete(id, "analyst", `Statistics: ${Object.keys(analysis.statistics).length} metrics`);
-          await saveOutput("analyst", id, "analysis", JSON.stringify(analysis), analysis.quality);
+          await saveOutput("analyst", id, "result", JSON.stringify(analysis), analysis.quality);
           return analysis;
         } catch (e) {
           emitAgentError(id, "analyst", (e as Error).message);
@@ -174,7 +175,7 @@ export async function runResearchPipeline(
       })(),
       (async () => {
         try {
-          const graphRes = await buildGraphFromFindings(sources, id);
+          const graphRes = await buildGraphFromFindings(allFindings, id);
           for (const node of graphRes.nodes) {
             emitGraphNode(id, node.name, node.type);
           }
@@ -256,13 +257,22 @@ export async function runResearchPipeline(
     reasoningTask.output = `${insights.insights.length} deep insights + ${insights.knowledgeGaps.length} gaps`;
 
     // ─── Phase 4: Review ────────────────────────────────────────────────────
-    console.log(`[Orchestrator] Phase 4: Self-review...`);
+    console.log(`[Orchestrator] Phase 4: Reviewer Agent verifying insights quality...`);
     state.status = "reviewing";
     emitAgentStart(id, "reviewer", "Verify insights quality");
 
-    const verifiedInsights = await selfReview(sources, insights);
+    const reviewResult = await reviewInsights(insights, allFindings);
+    console.log(`[Orchestrator] Review: score=${reviewResult.score}/100, approved=${reviewResult.approved}, issues=${reviewResult.issues.length}`);
+
+    const verifiedInsights = reviewResult.approved
+      ? insights.insights
+      : insights.insights.map((insight) => ({ ...insight, verified: false }));
+
+    // Attach review feedback to session
+    await saveOutput("reviewer", id, "feedback", JSON.stringify(reviewResult), reviewResult.score / 100);
+
     state.insights = { ...insights, insights: verifiedInsights };
-    emitAgentComplete(id, "reviewer", `Verified ${verifiedInsights.length}/${insights.insights.length} insights`);
+    emitAgentComplete(id, "reviewer", `Review: ${reviewResult.score}/100 | ${reviewResult.issues.length} issues found`);
 
     state.status = "completed";
     emitPhase(id, "completed", "all phases done", 100);
@@ -281,7 +291,7 @@ export async function runResearchPipeline(
     const gr = graphResult as { nodes: unknown[]; edges: unknown[]; stats: Record<string, number> } | null;
     return {
       sessionId: id,
-      findings: sources,
+      findings: allFindings,
       insights: state.insights,
       tasks: state.tasks,
       duration,

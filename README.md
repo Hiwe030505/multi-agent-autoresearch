@@ -1,6 +1,26 @@
-# AutoResearch — Multi-Agent Research System
+# AutoResearch — Multi-Agent Research Engine
 
-> Hệ thống nghiên cứu tự động với nhiều AI agent chuyên môn, tương tự nhóm Senior Research Team.
+> Hệ thống nghiên cứu tự động với 7 AI agent chuyên môn, tương tự nhóm Senior Research Team. Giao diện: **Claude CLI-style chatbot** + **Enhanced CLI** với real-time streaming.
+
+## TL;DR — Quick Start
+
+```bash
+# 1. Cài đặt
+npm install
+
+# 2. Chạy API server
+npm run dev                    # → http://localhost:3001
+
+# 3. Chạy frontend chatbot  (terminal mới)
+cd frontend && npm run dev     # → http://localhost:3000
+
+# 4. Hoặc dùng CLI
+npm run cli -- research "RAG optimization techniques"
+npm run cli -- research "RAG optimization" --stream   # real-time streaming
+npm run cli -- watch <sessionId>                        # watch live session
+```
+
+---
 
 ## Mục lục
 
@@ -12,7 +32,6 @@
 6. [LLM Providers & Models](#6-llm-providers--models)
 7. [Cấu hình](#7-cấu-hình)
 8. [Development](#8-development)
-9. [Deployment](#9-deployment)
 
 ---
 
@@ -20,227 +39,336 @@
 
 ### AutoResearch là gì?
 
-AutoResearch là một hệ thống **multi-agent research engine** gồm 6 agents hoạt động phối hợp như một nhóm nghiên cứu chuyên nghiệp:
+AutoResearch là một **multi-agent research engine** với 7 agents hoạt động phối hợp như một nhóm nghiên cứu chuyên nghiệp:
 
-| Agent | Vai trò |
-|-------|---------|
-| 🧠 **Orchestrator** | Điều phối pipeline, phân công task, tổng hợp kết quả |
-| 🔬 **Researcher** | Tìm kiếm paper, tổng hợp tài liệu, trích xuất findings |
-| 💡 **Reasoner** | Phân tích deep insights, tìm hidden connections |
-| 💻 **Coder** | Generate code, unit tests, debug |
-| 📊 **Analyst** | Phân tích dữ liệu, so sánh benchmarks |
-| 📝 **Writer** | Viết literature review, báo cáo, tài liệu |
-| ✅ **Reviewer** | QA, fact-check, verify claims |
+| Agent | Vai trò | Chiến lược |
+|-------|---------|-----------|
+| 🧠 **Orchestrator** | Điều phối pipeline, phân công task, tổng hợp kết quả | Multi-phase pipeline |
+| 🔍 **Researcher** | Tìm kiếm web, trích xuất findings từ papers/sources | Real web search (Tavily) |
+| 🧠 **Reasoner** | Phân tích deep insights, tìm hidden connections | 6 chiến lược reasoning |
+| 💻 **Coder** | Generate code, unit tests, debug | Code synthesis |
+| 📊 **Analyst** | Phân tích dữ liệu, so sánh benchmarks | Statistical analysis |
+| ✍️ **Writer** | Viết literature review, báo cáo, tài liệu | Multi-section output |
+| ✅ **Reviewer** | QA, fact-check, verify claims | Quality gates |
 
-### Điểm khác biệt với NotebookLM
+### Hai giao diện sử dụng
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AutoResearch                             │
+├──────────────────────────┬──────────────────────────────────┤
+│  🌐 Web Chatbot           │  ⌨️  Enhanced CLI                │
+│  http://localhost:3000    │  npm run cli -- ...               │
+├──────────────────────────┼──────────────────────────────────┤
+│  Dark terminal aesthetic  │  Real-time agent streaming        │
+│  SSE live events         │  Colored output per agent         │
+│  Command palette (/)     │  watch / --stream modes            │
+│  Session history sidebar  │  Multiple output formats          │
+│  Knowledge Hub stats     │  Full API + local modes           │
+└──────────────────────────┴──────────────────────────────────┘
+```
+
+### Điểm khác biệt
 
 | | NotebookLM | AutoResearch |
 |--|----------|-------------|
 | Số sources | 50-100 | Unlimited |
-| Agents | 1 | 6 chuyên môn |
+| Agents | 1 | 7 chuyên môn |
 | Parallel processing | Không | Có |
 | Code generation | Không | Có |
+| Real-time streaming | Không | Có (SSE) |
 | Self-verification | Không | Reviewer Agent |
-| Long-term memory | Không | Knowledge Hub (vector DB) |
+| Long-term memory | Không | Knowledge Hub (pgvector) |
 | Reuse insights cũ | Không | Có (vector similarity) |
+| Giao diện | Google Docs-style | Claude CLI-style |
 
 ---
 
 ## 2. Kiến trúc
 
-### 2.1 Data Flow
+### 2.1 Pipeline Flow
 
 ```
-USER INPUT: "Research RAG optimization techniques"
-        │
-        ▼
-   Orchestrator (PM)
-        │
-   [1] Query Knowledge Hub ──→ Similar past research?
-        │
-   [2] DECOMPOSE ───────────────────────────────────┐
-        │                                             │
-        ├─► Researcher ──► Web/Paper search          │
-        │         │                                  │
-        │    [Extract findings]                       │
-        │         │                                  │
-        ├─► Reasoner ──► Deep Insights (6 strategies) │
-        │         │                                  │
-        ├─► Coder ──► Code prototype (optional)       │
-        │         │                                  │
-        ├─► Analyst ──► Data analysis (optional)     │
-        │         │                                  │
-        ├─► Writer ──► Literature review (optional)   │
-        │         │                                  │
-        └─► Reviewer ──► Quality verification         │
-                                              │      │
-                                    ┌─────────┘      │
-                                    ▼                  │
-                               [PASS? / FAIL]          │
-                                 │      │              │
-                                YES    NO ──► Retry ───┘
-                                 │                        │
-                                 ▼                        │
-                        Archive to Knowledge Hub          │
-                                 │                        │
-                                 ▼                        │
-                        Final Output → User ◄────────────┘
+USER INPUT
+    │
+    ▼
+Orchestrator
+    │
+    ├── Query Knowledge Hub → Reuse similar past research?
+    │
+    ├── Researcher ──→ Real web search (Tavily)
+    │         └── Extract structured findings
+    │
+    ├── Reasoner ──→ 6 reasoning strategies
+    │         ├── CROSS_PAPER_SYNTHESIS
+    │         ├── CONTRADICTION_HUNTING
+    │         ├── TEMPORAL_ANALYSIS
+    │         ├── GAP_DISCOVERY
+    │         ├── CROSS_DOMAIN_TRANSFER
+    │         └── FAILURE_ANALYSIS
+    │
+    ├── Coder (optional) ──→ Code prototype
+    ├── Analyst (optional) ──→ Data analysis
+    ├── Writer ──→ Literature review
+    ├── Reviewer ──→ QA + fact-check
+    │
+    ▼
+Archive to Knowledge Hub → Final Output
 ```
 
 ### 2.2 Knowledge Hub
 
 ```
-┌────────────────────────────────────────────────────────────┐
-│                      KNOWLEDGE HUB                          │
-├──────────────┬───────────────────┬──────────────────────────┤
-│ Long-term    │ Working          │ Communication           │
-│ Memory       │ Context          │ History                 │
-├──────────────┼───────────────────┼──────────────────────────┤
-│ PostgreSQL   │ Redis            │ JSONL File               │
-│ (pgvector)   │ (hot data)       │ (full log)              │
-├──────────────┼───────────────────┼──────────────────────────┤
-│ • Findings   │ • Task queue      │ • All agent messages     │
-│ • Insights   │ • Agent status    │ • Decision rationale     │
-│ • Sessions   │ • Session state   │ • Error log             │
-│ • Code lib   │ • Rate limiting   │ • Review threads        │
-├──────────────┼───────────────────┼──────────────────────────┤
-│ Vector       │ Structured        │ Full-text               │
-│ similarity   │ key-value         │ search                  │
-│ search       │ hash             │ + filters               │
-└──────────────┴───────────────────┴──────────────────────────┘
+PostgreSQL + pgvector  │  Redis              │  SSE Events
+──────────────────────┼────────────────────┼────────────────────
+• Findings (vector)   │  • Session state    │  Real-time agents
+• Insights            │  • Job queue        │  Progress updates
+• Sessions            │  • Cache            │  Live insights
+• Graph nodes/edges   │  • Rate limiting    │  Finding alerts
 ```
 
 ### 2.3 File Structure
 
 ```
 autoresearch/
-├── src/
-│   ├── index.ts              # Express API server
-│   ├── config.ts              # Configuration
-│   ├── types.ts               # TypeScript types
-│   ├── schema.sql             # PostgreSQL schema
+├── src/                          # Backend (Node.js/Express)
+│   ├── index.ts                  # API server (port 3001)
+│   ├── config.ts                 # Configuration
+│   ├── types.ts                  # TypeScript types
+│   ├── schema.sql                # PostgreSQL schema
 │   ├── agents/
-│   │   ├── orchestrator.ts    # Pipeline orchestration
-│   │   ├── researcher.ts      # Web search + summarization
-│   │   ├── reasoner.ts        # Deep insights (6 strategies)
-│   │   ├── coder.ts           # Code generation + review
-│   │   ├── analyst.ts         # Data analysis + charts
-│   │   ├── writer.ts          # Literature review + reports
-│   │   ├── reviewer.ts        # QA + fact-check
-│   │   ├── run-all.ts         # CLI runner
-│   │   └── lib/
-│   │       └── claude.ts      # Claude API client
-│   └── hub/
-│       ├── db.ts              # PostgreSQL + pgvector
-│       ├── redis.ts           # Redis queue + cache
-│       ├── embeddings.ts      # OpenAI embeddings
-│       └── queries.ts         # High-level KB operations
-├── docker-compose.yml         # Full stack deployment
-├── .env                       # Environment variables
+│   │   ├── orchestrator.ts       # Pipeline orchestration
+│   │   ├── researcher.ts        # Web search + summarization
+│   │   ├── reasoner.ts          # Deep insights (6 strategies)
+│   │   ├── coder.ts             # Code generation
+│   │   ├── analyst.ts           # Data analysis
+│   │   ├── writer.ts            # Literature review
+│   │   ├── reviewer.ts          # QA + fact-check
+│   │   └── run-all.ts           # Standalone CLI runner
+│   ├── hub/
+│   │   ├── db.ts                # PostgreSQL + pgvector
+│   │   ├── redis.ts             # Redis cache + queue
+│   │   ├── embeddings.ts        # OpenAI embeddings
+│   │   ├── events.ts            # SSE event emitter
+│   │   ├── queries.ts           # High-level KB operations
+│   │   └── search.ts            # Web search (Tavily)
+│   ├── llm/
+│   │   └── client.ts            # Unified LLM client (9 providers)
+│   ├── utils/
+│   │   └── json.ts              # Robust JSON parsing utilities
+│   └── cli/
+│       ├── index.ts             # CLI entry point
+│       ├── config.ts            # CLI config loader
+│       ├── sessions.ts          # Session management
+│       ├── formatters.ts        # Output formatters
+│       └── theme.ts             # Terminal colors
+├── frontend/                     # Frontend (Next.js 16)
+│   ├── app/
+│   │   ├── globals.css           # Terminal aesthetic CSS
+│   │   ├── page.tsx             # Redirect → /chat
+│   │   └── chat/
+│   │       └── page.tsx         # Main chatbot page
+│   ├── components/
+│   │   ├── chat/               # Chat UI components
+│   │   │   ├── ChatContainer.tsx
+│   │   │   ├── MessageList.tsx
+│   │   │   ├── MessageBubble.tsx
+│   │   │   ├── AgentCard.tsx
+│   │   │   ├── StreamingText.tsx
+│   │   │   ├── ThinkingBlock.tsx
+│   │   │   └── InputBar.tsx
+│   │   ├── sidebar/            # Sidebar + session list
+│   │   ├── command/            # Command palette
+│   │   └── shared/             # Spinner, Toast
+│   ├── hooks/
+│   │   ├── useSSEStream.ts     # SSE event stream hook
+│   │   ├── useChatState.ts     # Chat state management
+│   │   └── useCommandPalette.ts
+│   ├── lib/
+│   │   ├── api.ts              # Existing API client
+│   │   └── chat-api.ts         # Chat-specific API wrapper
+│   └── types/
+│       └── chat.ts             # Chat TypeScript types
 ├── package.json
 ├── tsconfig.json
-├── AUTORESEARCH_SYSTEM.md     # Full system design doc
-└── README.md                  # This file
+└── README.md
 ```
 
 ---
 
 ## 3. Cài đặt
 
-### 3.1 Yêu cầu
+### Yêu cầu
 
 - **Node.js** >= 18
 - **Docker & Docker Compose** (cho PostgreSQL + Redis)
-- **Claude API key** (hoặc proxy như pro-x.io.vn)
-- **OpenAI API key** (cho embeddings — optional)
+- **LLM API key** (Anthropic, Groq, OpenAI, Ollama local...)
 
-### 3.2 Nhanh nhất
+### Nhanh nhất
 
 ```bash
-# Clone hoặc cd vào project
+# Clone và cài đặt
 cd autoresearch
-
-# Cài đặt dependencies
 npm install
 
-# Khởi động infrastructure (PostgreSQL + Redis)
+# Infrastructure (PostgreSQL + Redis)
 docker-compose up -d postgres redis
 
-# Chạy pipeline ngay (không cần DB)
-npx tsx src/agents/run-all.ts --topic "RAG optimization techniques"
+# Khởi động API
+npm run dev                    # → http://localhost:3001
+
+# Terminal mới — khởi động frontend
+cd frontend && npm install && npm run dev   # → http://localhost:3000
 ```
 
-### 3.3 Đầy đủ (với Docker)
+### Kiểm tra nhanh
 
 ```bash
-# Build và chạy toàn bộ stack
-docker-compose up --build -d
-
-# API chạy tại http://localhost:3001
+# Health check
 curl http://localhost:3001/health
+
+# Stats
+curl http://localhost:3001/api/hub/stats
+
+# System status
+curl http://localhost:3001/api/status
 ```
 
 ---
 
 ## 4. Cách sử dụng
 
-### 4.1 CLI — Chạy Research Pipeline
+### 4.1 Web Chatbot (Recommended)
+
+Mở **http://localhost:3000** — giao diện chatbot terminal-style.
+
+**Commands:**
+
+| Command | Mô tả |
+|---------|--------|
+| `/research <topic>` | Bắt đầu research session |
+| `/stats` | Xem Knowledge Hub statistics |
+| `/kb <query>` | Tìm kiếm knowledge base |
+| `/sessions` | Xem danh sách sessions |
+| `/clear` | Xóa conversation hiện tại |
+| `/help` | Hiển thị tất cả commands |
+
+### 4.2 Enhanced CLI
 
 ```bash
 # Research cơ bản
-npx tsx src/agents/run-all.ts --topic "RAG optimization techniques"
+npm run cli -- research "RAG optimization techniques"
 
 # Với keywords
-npx tsx src/agents/run-all.ts --topic "LLM fine-tuning" --keywords "rag,llm,fine-tuning"
+npm run cli -- research "LLM fine-tuning" -k "rag,retrieval,chunking"
 
-# Full pipeline (bao gồm code gen, analysis, writing)
-npx tsx src/agents/run-all.ts --topic "Knowledge Graph + RAG" --full
+# Với real-time streaming (xem agents hoạt động)
+npm run cli -- research "RAG optimization" --stream
+
+# Watch một session đang chạy
+npm run cli -- watch <sessionId>
+
+# Session management
+npm run cli -- session list
+npm run cli -- session show <sessionId> --format md
+npm run cli -- session export <sessionId> md output.md
+
+# Knowledge base
+npm run cli -- kb search "chunking strategies"
+npm run cli -- kb stats
+npm run cli -- kb graph
+
+# Config
+npm run cli -- config show
+npm run cli -- config init        # Tạo ~/.autoresearchrc
 ```
 
-**Output mẫu:**
+**Streaming output mẫu:**
 ```
-🔬 AutoResearch — Research Topic: "RAG optimization techniques"
+🔬 AutoResearch — Streaming Mode
+   Topic: RAG optimization techniques
 ────────────────────────────────────────────────────────────
-[Orchestrator] Phase 1: Research...
-[Orchestrator] Phase 2: Reasoning (Deep Insights)...
-[Orchestrator] Phase 3: Writing...
-✅ Research completed in 142.7s
+   Starting research pipeline...
+   Session: abc-123
 
-📄 Findings: 5
-💡 Insights: 8
-📊 Knowledge Gaps: 5
+  ⚡ researcher  Searching web for sources
+  🔍 Source: Self-RAG: Learning to Retrieve, Generate, and Critique
+  🔍 Source: HyDE: Hypothetical Document Embeddings
+  ⚡ researcher  done (3.2s)
+  ⚡ reasoner  Generating deep insights
+  💡 Insight: Hierarchical chunking + reranking synergy
+  ⚡ reasoner  done (8.1s)
+  ⚡ writer  Writing literature review
+  ⚡ writer  done (5.7s)
+  ⚡ reviewer  QA verification
+  ⚡ reviewer  done (2.3s)
 
-TOP INSIGHTS:
-  1. [TEMPORAL] RAG Optimization Has Shifted...
-  2. [SYNTHESIS] Hierarchical Chunking + Reranking...
-  3. [CONTRADICTION] Dense Retrieval vs BM25...
+✅ Research completed!
+   5 findings, 8 insights
 ```
 
-### 4.2 API Server
+### 4.3 API Server (background)
 
 ```bash
-# Khởi động server
-npm run dev
-
-# Bắt đầu research (async)
+# Bắt đầu research (async — trả về sessionId ngay)
 curl -X POST http://localhost:3001/api/research \
   -H "Content-Type: application/json" \
-  -d '{"topic": "RAG optimization techniques", "keywords": ["rag", "retrieval"]}'
+  -d '{"topic": "RAG optimization", "keywords": ["rag", "retrieval"]}'
 
 # Poll kết quả
 curl http://localhost:3001/api/research/{sessionId}
 
-# Xem danh sách sessions
+# SSE real-time stream
+curl -N http://localhost:3001/api/events/{sessionId}/stream
+
+# Xem sessions
 curl http://localhost:3001/api/sessions
 
-# System status
-curl http://localhost:3001/api/status
+# Knowledge graph
+curl http://localhost:3001/api/graph/stats
+curl "http://localhost:3001/api/graph/search?q=chunking"
+
+# Proposal analyzer (multipart file upload)
+curl -X POST http://localhost:3001/api/proposal/analyze \
+  -F "text=Your research proposal text here..."
 ```
 
-### 4.3 API Response Format
+---
 
-**POST /api/research** trả về ngay (xử lý background):
+## 5. API Reference
 
+### Core Endpoints
+
+| Method | Endpoint | Mô tả |
+|--------|---------|--------|
+| `GET` | `/health` | Health check |
+| `POST` | `/api/research` | Bắt đầu research job |
+| `GET` | `/api/research/:id` | Lấy kết quả / trạng thái |
+| `GET` | `/api/research/:id/findings` | Lấy findings của session |
+| `GET` | `/api/sessions` | Danh sách sessions |
+| `GET` | `/api/status` | System + agent status |
+| `GET` | `/api/hub/stats` | Knowledge Hub statistics |
+| `GET` | `/api/graph` | Full knowledge graph |
+| `GET` | `/api/graph/stats` | Graph statistics |
+| `GET` | `/api/graph/search?q=` | Tìm kiếm graph |
+| `GET` | `/api/graph/contradictions` | Các contradictions |
+| `GET` | `/api/graph/gaps` | Research gaps |
+| `GET` | `/api/events/:id/stream` | SSE real-time event stream |
+| `POST` | `/api/proposal/analyze` | Phân tích research proposal |
+
+### POST /api/research
+
+**Request:**
+```json
+{
+  "topic": "RAG optimization techniques",
+  "keywords": ["rag", "retrieval", "chunking"],
+  "sessionId": "uuid (optional)",
+  "maxSources": 10
+}
+```
+
+**Response (immediate):**
 ```json
 {
   "sessionId": "abc-123",
@@ -249,7 +377,7 @@ curl http://localhost:3001/api/status
 }
 ```
 
-**GET /api/research/{id}** — khi hoàn thành:
+### GET /api/research/:id (completed)
 
 ```json
 {
@@ -260,8 +388,11 @@ curl http://localhost:3001/api/status
       "id": "f001",
       "title": "Self-RAG: Learning to Retrieve...",
       "sourceUrl": "https://arxiv.org/...",
+      "sourceType": "paper",
       "confidence": 0.9,
-      "summary": "..."
+      "keyFindings": [
+        { "finding": "...", "evidence": "...", "confidence": 0.85 }
+      ]
     }
   ],
   "insights": {
@@ -273,490 +404,169 @@ curl http://localhost:3001/api/status
         "type": "synthesis",
         "title": "Hierarchical Chunking + Reranking",
         "summary": "...",
-        "confidence": 0.82
+        "confidence": 0.82,
+        "noveltyScore": 0.6,
+        "evidenceRefs": ["f001", "f003"]
       }
     ],
-    "knowledgeGaps": ["..."],
+    "knowledgeGaps": ["...", "..."],
     "researchTrends": {
       "rising": ["long-context", "multi-modal-rag"],
       "stable": ["reranking", "hybrid-search"],
       "declining": ["fixed-chunk"]
     }
   },
-  "tasks": [...],
+  "reusedFromKnowledgeHub": [],
   "duration": 142700
 }
 ```
 
----
+### SSE Event Types
 
-## 5. API Reference
-
-### Endpoints
-
-| Method | Endpoint | Mô tả |
-|--------|---------|--------|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/research` | Bắt đầu research job |
-| `GET` | `/api/research/:id` | Lấy kết quả / trạng thái job |
-| `GET` | `/api/sessions` | Danh sách tất cả sessions |
-| `GET` | `/api/status` | System status + agent health |
-
-### POST /api/research
-
-**Request:**
-```json
-{
-  "topic": "string (required)",
-  "keywords": ["string"] (optional),
-  "sessionId": "string (optional, dùng lại session)",
-  "maxSources": 10 (optional, default: 10)
-}
-```
-
-**Response:**
-```json
-{
-  "sessionId": "uuid",
-  "status": "pending",
-  "message": "Research started"
-}
-```
-
-### GET /api/research/:id
-
-**Response (completed):**
-```json
-{
-  "sessionId": "uuid",
-  "status": "completed",
-  "findings": [...],
-  "insights": {...},
-  "tasks": [...],
-  "duration": 142700,
-  "reusedFromKnowledgeHub": [...]
-}
-```
-
-**Response (pending/running):**
-```json
-{
-  "sessionId": "uuid",
-  "status": "running",
-  "message": "Research in progress..."
-}
-```
+| Event | Payload | Mô tả |
+|-------|---------|--------|
+| `connected` | `{ sessionId, timestamp }` | Kết nối thành công |
+| `agent.start` | `{ agent, task }` | Agent bắt đầu |
+| `agent.complete` | `{ agent, output? }` | Agent hoàn thành |
+| `agent.error` | `{ agent, error }` | Agent lỗi |
+| `orchestrator.phase` | `{ phase, progress }` | Pipeline phase update |
+| `reasoner.insight` | `{ insight }` | Insight mới được sinh ra |
+| `researcher.found` | `{ title, summary }` | Finding mới được tìm thấy |
 
 ---
 
 ## 6. LLM Providers & Models
 
-### 6.1 Supported Providers
+### Supported Providers
 
-| Provider | Loại | API Key | Ví dụ Model | Chi phí |
-|----------|------|---------|-------------|---------|
-| **Anthropic** | Cloud | `ANTHROPIC_API_KEY` | `claude-opus-4-6`, `claude-sonnet-4-6` | 💰 Cao |
-| **OpenAI** | Cloud | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini`, `o1` | 💰 Trung |
-| **Groq** | Cloud | `GROQ_API_KEY` | `llama-3.3-70b-versatile`, `mixtral-8x7b` | 🆓 Free tier (30 req/min) |
-| **Ollama** | Local | Không cần | `llama3.2`, `qwen2.5`, `codellama` | 🆓 Miễn phí |
-| **LM Studio** | Local | Không cần | Bất kỳ model nào đã tải | 🆓 Miễn phí |
-| **vLLM** | Local | Tự set | `Llama-3.1-8B`, `Qwen-2.5` | 🆓 Miễn phí |
-| **Fireworks AI** | Cloud | `FIREWORKS_API_KEY` | `llama-v3p3-70b-instruct` | 💰 Rẻ |
+| Provider | API Key | Ví dụ Model | Chi phí |
+|----------|---------|-------------|---------|
+| **Anthropic** | `ANTHROPIC_API_KEY` | `claude-opus-4-6`, `claude-sonnet-4-6` | 💰 |
+| **OpenAI** | `OPENAI_API_KEY` | `gpt-4o`, `gpt-4o-mini`, `o1` | 💰 |
+| **Groq** | `GROQ_API_KEY` | `llama-3.3-70b-versatile`, `mixtral-8x7b` | 🆓 Free |
+| **Ollama** | Không cần | `llama3.2`, `qwen2.5`, `codellama` | 🆓 |
+| **LM Studio** | Không cần | Bất kỳ model nào đã tải | 🆓 |
+| **vLLM** | Tự set | `Llama-3.1-8B`, `Qwen-2.5` | 🆓 |
+| **Fireworks AI** | `FIREWORKS_API_KEY` | `llama-v3p3-70b-instruct` | 💰 |
+| **HuggingFace** | `HF_TOKEN` | `mistralai/Mixtral-8x7B` | 💰 |
+| **Kyma** | `KYMA_API_KEY` | Custom endpoints | 💰 |
 
-### 6.2 Thêm API Keys
+### Model Recommendations per Agent
 
-Mở file `.env` và thêm các biến sau:
+| Agent | Primary | Free (Groq) | Local (24GB VRAM) |
+|-------|---------|------------|-------------------|
+| Orchestrator | Claude Opus 4 | llama-3.3-70b | llama3.1:70b |
+| Reasoner | Claude Opus 4 | llama-3.3-70b | llama3.1:70b |
+| Research | Claude Sonnet 4 | llama-3.3-70b | llama3.2:3b |
+| Coder | Claude Sonnet 4 | llama-3.3-70b | qwen2.5:32b |
+| Analyst | Claude Sonnet 4 | llama-3.3-70b | qwen2.5:32b |
+| Writer | Claude Opus 4 | llama-3.3-70b | llama3.1:8b |
+| Reviewer | Claude Opus 4 | llama-3.3-70b | llama3.1:70b |
+
+### Quick Config — Switch Provider
 
 ```env
-# ─── Anthropic (Claude) — hiện tại đang dùng ─────────────────────────
-ANTHROPIC_API_KEY=sk-c2f7fd5fc46e43279fb9c27d46aff48669f1da8db5ad5655b3606fcc9477e22b
-ANTHROPIC_BASE_URL=https://pro-x.io.vn/          # proxy hoặc https://api.anthropic.com
+# .env
+ANTHROPIC_API_KEY=sk-...
+ANTHROPIC_BASE_URL=https://pro-x.io.vn/
 
-# ─── OpenAI (GPT-4, o1, embeddings) ──────────────────────────────────
-OPENAI_API_KEY=sk-...                              # platform.openai.com
-OPENAI_BASE_URL=https://api.openai.com/v1
-
-# ─── Groq — free tier rất nhanh ─────────────────────────────────────
-# Đăng ký: console.groq.com (free 30 req/min)
+# Hoặc dùng Groq (free tier — nhanh)
 GROQ_API_KEY=gsk_...
-GROQ_BASE_URL=https://api.groq.com/openai/v1
-
-# ─── Ollama — local models miễn phí ────────────────────────────────
-# Chạy: `ollama serve` (mặc định localhost:11434)
-OLLAMA_BASE_URL=http://localhost:11434
-
-# ─── LM Studio — local GUI ──────────────────────────────────────────
-# Mở LM Studio → Server Settings → Enable OpenAI-Compatible API
-LMSTUDIO_BASE_URL=http://localhost:1234/v1
-LMSTUDIO_API_KEY=lm-studio
-
-# ─── vLLM — self-hosted production ─────────────────────────────────
-# python -m vllm.entrypoints.openai.api_server --model meta-llama/Llama-3.1-8B-Instruct
-VLLM_BASE_URL=http://localhost:8000/v1
-VLLM_API_KEY=EMPTY
-
-# ─── Fireworks AI — fast inference ─────────────────────────────────
-FIREWORKS_API_KEY=...
 ```
 
-### 6.3 Model Selection Guide — Tại sao chọn model này?
-
-```
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                     MODEL SELECTION DECISION TREE                              ║
-╠══════════════════════════════════════════════════════════════════════════════╣
-║                                                                               ║
-║  Bạn có GPU mạnh (24GB+ VRAM)?                                              ║
-║     │                                                                        ║
-║     ├─ YES ──► Chạy local (Ollama / LM Studio / vLLM)  → Tiết kiệm 100%    ║
-║     │                 Recommendation: llama3.1:70b (reasoning)               ║
-║     │                                  qwen2.5:32b (coding)                    ║
-║     │                                  codellama:34b (code)                    ║
-║     │                                                                        ║
-║     └─ NO ───► Chạy cloud API                                                ║
-║                 │                                                             ║
-║                 ├─ Budget cao ──► Claude Opus 4 (best quality)               ║
-║                 │                  + GPT-4o (backup)                        ║
-║                 │                                                             ║
-║                 ├─ Budget trung ──► Groq + Claude Sonnet (fast + good)       ║
-║                 │                  Groq: llama-3.3-70b (free!)             ║
-║                 │                                                             ║
-║                 └─ Budget thấp ──► Groq + GPT-4o-mini (rẻ nhất)            ║
-║                                    Ollama llama3.2:3b (free, fast)            ║
-╚══════════════════════════════════════════════════════════════════════════════╝
-```
-
-### 6.4 Model Recommendations per Agent
-
-| Agent | Primary (Cloud) | Fallback (Free) | Local GPU | Notes |
-|-------|----------------|----------------|-----------|-------|
-| **Orchestrator** | Claude Opus 4 | Groq llama-3.3-70b | llama3.1:70b | Cần chain-of-thought mạnh |
-| **Reasoning** | Claude Opus 4 | Groq llama-3.3-70b | llama3.1:70b | Deep reasoning — avoid small models |
-| **Research** | Claude Sonnet 4 | Groq llama-3.3-70b | llama3.2:3b | Small model OK cho summarization |
-| **Coder** | Claude Sonnet 4 | Groq llama-3.3-70b | qwen2.5:32b | Qwen mạnh về code |
-| **Analyst** | Claude Sonnet 4 | Groq llama-3.3-70b | qwen2.5:32b | Qwen tốt về math/stats |
-| **Writer** | Claude Opus 4 | Groq llama-3.3-70b | llama3.1:8b | Opus viết hay nhất |
-| **Reviewer** | Claude Opus 4 | Groq llama-3.3-70b | llama3.1:70b | Cần strict reasoning |
-
-### 6.5 Benchmark Comparison (Approximate)
-
-| Model | Code | Reasoning | Writing | Speed | VRAM |
-|-------|------|-----------|---------|-------|------|
-| `claude-opus-4-6` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Medium | N/A |
-| `gpt-4o` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Medium | N/A |
-| `llama-3.3-70b` (Groq) | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⚡ Very Fast | N/A |
-| `codellama:34b` (Ollama) | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | Medium | 24GB |
-| `qwen2.5:32b` (Ollama) | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | Medium | 24GB |
-| `llama3.1:70b` (Ollama) | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | Slow | 80GB |
-| `llama3.2:3b` (Ollama) | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⚡ Very Fast | 4GB |
-
-### 6.6 Sử dụng Unified LLM Client
-
-```typescript
-import { llm } from "./src/llm/client.ts";
-
-// ─── Cách 1: Qua shortcut (nhanh nhất) ─────────────────────────────────
-const result = await llm.call(
-  "Viết một function fibonacci",
-  "claude-opus-4-6"     // auto-detect provider từ tên
-);
-console.log(result);
-
-// ─── Cách 2: Chỉ rõ provider ────────────────────────────────────────────
-const result2 = await llm.call(
-  "Explain RAG in 3 sentences",
-  "llama-3.3-70b",       // → provider: "groq"
-  { provider: "groq" }
-);
-
-// ─── Cách 3: Đầy đủ options ─────────────────────────────────────────────
-const result3 = await llm.chat(
-  [{ role: "user", content: "Tóm tắt paper này..." }],
-  {
-    provider: "anthropic",
-    model: "claude-sonnet-4-6",
-    system: "You are a senior research analyst.",
-    temperature: 0.3,
-    maxTokens: 2048,
-  }
-);
-
-// ─── Cách 4: Check provider health ───────────────────────────────────────
-const health = await llm.status();
-console.log(health);
-// { anthropic: true, openai: false, groq: true, ollama: true, lmstudio: false, ... }
-```
-
-### 6.7 Ollama — Setup và Recommended Models
+### Ollama Setup (free local)
 
 ```bash
-# 1. Cài Ollama
-curl -fsSL https://ollama.com/install.sh | sh
-
-# 2. Khởi động server
 ollama serve
-
-# 3. Pull models (chọn theo VRAM của bạn)
-
-# ── 4GB VRAM: Small & Fast ──────────────────────────────────
-ollama pull llama3.2:3b                    # General (4GB)
-ollama pull llama3.2:1b                   # Ultra fast (2GB)
-
-# ── 8GB VRAM: Medium quality ────────────────────────────────
-ollama pull llama3.1:8b                   # General (8GB)
-ollama pull qwen2.5:14b                   # Coding (14GB)
-
-# ── 24GB VRAM: Good quality ────────────────────────────────
-ollama pull codellama:34b                  # Code specialized (24GB)
-ollama pull qwen2.5:32b                   # Code + Math (24GB)
-ollama pull llama3.1:70b                  # Best local reasoning (80GB!)
-
-# ── 80GB VRAM: Production quality ───────────────────────────
-ollama pull llama3.1:70b                  # Near GPT-4 quality (80GB)
-
-# 4. Verify
-ollama list
+ollama pull llama3.1:70b     # Reasoning (80GB VRAM)
+ollama pull qwen2.5:32b     # Coding (24GB VRAM)
 ```
-
-**Tại sao `llama3.1:70b` cho reasoning?**
-- Small models (3B, 8B) gặp khó với multi-step reasoning và long context
-- `llama3.1:70b` đủ lớn để hiểu được complex research analysis
-- `qwen2.5:32b` tốt hơn `llama3.1:70b` về code generation ở cùng VRAM
-- `codellama:34b` specialized cho code nhưng yếu hơn về reasoning tổng quát
-
-### 6.8 LM Studio — Setup
-
-```bash
-# 1. Tải LM Studio: https://lmstudio.ai
-
-# 2. Mở app → Tải model
-#    Recommend: Meta-Llama-3.1-70B-Instruct-Q4_K_M (nếu đủ RAM)
-
-# 3. Server Settings (sidebar)
-#    □ Enable OpenAI-Compatible API
-#    Port: 1234
-#    API Key: (để trống hoặc điền "lm-studio")
-
-# 4. Nhấn ▶ Start Server
-
-# 5. Test
-curl http://localhost:1234/v1/models
-```
-
-### 6.9 Cost Comparison (1 triệu tokens)
-
-| Provider/Model | Input | Output | Notes |
-|---------------|-------|--------|-------|
-| Claude Opus 4 | $15 | $75 | Best quality |
-| Claude Sonnet 4 | $3 | $15 | Good value |
-| GPT-4o | $5 | $15 | Good all-round |
-| GPT-4o-mini | $0.15 | $0.60 | Very cheap |
-| Groq llama-3.3-70b | Free* | Free* | *30 req/min free |
-| Ollama (local) | $0 | $0 | Free if you have GPU |
-
-**Recommendation cho cost-conscious users:**
-```
-Research Agent  → Groq llama-3.3-70b (free, fast)
-Coder Agent     → Groq llama-3.3-70b (free, fast)
-Reasoner Agent  → Claude Sonnet 4 (quality matters)
-Writer Agent    → Claude Sonnet 4 (quality matters)
-```
-
-### 6.10 Production: Ollama vs LM Studio vs vLLM
-
-| Criteria | Ollama | LM Studio | vLLM |
-|----------|--------|-----------|------|
-| Setup | ⭐⭐ Easy (CLI) | ⭐⭐⭐ Easy (GUI) | ⭐ Complex |
-| GPU usage | ⭐ Basic | ⭐⭐ Advanced | ⭐⭐⭐⭐⭐ Best |
-| Throughput | ⭐ Basic | ⭐⭐ Good | ⭐⭐⭐⭐⭐ Best |
-| Model variety | ⭐⭐ Good | ⭐⭐⭐ Many | ⭐⭐⭐⭐ Many |
-| API compatibility | Ollama native | OpenAI-compatible | OpenAI-compatible |
-| Best for | Dev, testing | Local dev | Production |
-
-**Production recommendation:** vLLM > LM Studio > Ollama
-**Local dev recommendation:** LM Studio (GUI dễ dùng)
 
 ---
 
 ## 7. Cấu hình
 
-### 7.1 Environment Variables (`.env`)
-
-Thêm các API key vào file `.env`:
+### .env
 
 ```env
 # ─── Anthropic (Claude) ───────────────────────────────────────────────
 ANTHROPIC_API_KEY=sk-...           # Required
 ANTHROPIC_BASE_URL=https://pro-x.io.vn/
 
-# ─── OpenAI (GPT-4, o1, embeddings) ──────────────────────────────────
+# ─── OpenAI (GPT-4, embeddings) ──────────────────────────────────────
 OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
 
-# ─── Groq (fast, free) ────────────────────────────────────────────────
-GROQ_API_KEY=gsk_...              # console.groq.com
+# ─── Groq (free, fast) ────────────────────────────────────────────────
+GROQ_API_KEY=gsk_...
 
 # ─── Ollama (local) ──────────────────────────────────────────────────
 OLLAMA_BASE_URL=http://localhost:11434
 
-# ─── LM Studio (local) ──────────────────────────────────────────────
-LMSTUDIO_BASE_URL=http://localhost:1234/v1
-LMSTUDIO_API_KEY=lm-studio
-
-# ─── vLLM (self-hosted) ──────────────────────────────────────────────
-VLLM_BASE_URL=http://localhost:8000/v1
-VLLM_API_KEY=EMPTY
-
-# ─── Fireworks AI ────────────────────────────────────────────────────
-FIREWORKS_API_KEY=...
-
 # ─── Infrastructure ─────────────────────────────────────────────────
-DATABASE_URL=postgres://postgres:ar_password_2026@localhost:5432/autoresearch
-POSTGRES_PASSWORD=ar_password_2026
-REDIS_URL=redis://:ar_redis_2026@localhost:6380
+DATABASE_URL=postgres://postgres:password@localhost:5432/autoresearch
+POSTGRES_PASSWORD=password
+REDIS_URL=redis://:password@localhost:6380
 PORT=3001
 NODE_ENV=development
 ```
 
-### 7.2 Switching Between Providers
+### Switching Models per Agent
 
-Cách nhanh nhất để chuyển provider cho một agent — edit `src/config.ts`:
+Edit `src/config.ts`:
 
 ```typescript
-// Trước (Anthropic):
 models: {
-  research: "claude-sonnet-4-6",  // $$$
-
-  research: "llama-3.3-70b-versatile",  // Groq: free, fast
-  research: "llama3.2",              // Ollama: free, local
+  orchestrator: "llama-3.3-70b-versatile",  // Groq: free
+  reasoning:    "claude-opus-4-6",          // Anthropic: quality
+  research:     "llama-3.3-70b-versatile",  // Groq: free
 }
-```
-
-Hoặc dùng env var để override:
-```env
-# Override model per agent via environment
-AGENT_MODEL_RESEARCH=llama-3.3-70b-versatile
-AGENT_MODEL_CODER=qwen2.5:32b
-```
-
-### 7.3 Provider Health Check
-
-```bash
-# Kiểm tra tất cả providers cùng lúc
-npx tsx -e "
-import { llm } from './src/llm/client.ts';
-const s = await llm.status();
-console.table(Object.entries(s).map(([k,v]) => ({ provider: k, available: v ? '✅' : '❌' })));
-"
 ```
 
 ---
 
 ## 8. Development
 
-### 8.1 Chạy development server
-
 ```bash
-# API server với hot-reload
+# API + hot-reload
 npm run dev
 
 # CLI runner
-npx tsx src/agents/run-all.ts --topic "..."
-npx tsx src/agents/run-all.ts --topic "..." --full
+npm run cli -- research "..."
+npm run cli -- research "..." --stream
+
+# Watch a session live
+npm run cli -- watch <sessionId>
+
+# TypeScript check
+npx tsc -p tsconfig.json              # Backend
+cd frontend && npx tsc --noEmit       # Frontend
+
+# Build frontend
+cd frontend && npm run build
 ```
 
-### 8.2 TypeScript check
-
-```bash
-./node_modules/.bin/tsc -p tsconfig.json
-```
-
-### 8.3 Chạy tests
-
-```bash
-npm test
-```
-
-### 8.4 Thêm Agent mới
+### Adding a New Agent
 
 ```typescript
-// src/agents/newagent.ts
+// src/agents/myxgent.ts
 import { llm } from "../llm/client.ts";
 
-export async function runMyAgent(task: string): Promise<Result> {
-  const response = await llm.chat(
-    [{ role: "user", content: task }],
-    {
-      provider: "anthropic",
-      model: "claude-sonnet-4-6",
-      system: "Your system prompt here",
-    }
-  );
-  return parseResponse(response.content);
+export async function runMyAgent(task: string) {
+  const result = await llm.call(task, "llama-3.3-70b-versatile");
+  return parseResponse(result);
 }
-
-// Hoặc dùng unified llm client:
-import { llm } from "../llm/client.ts";
-
-const result = await llm.call(
-  "Analyze this research finding",
-  "claude-sonnet-4-6",  // auto-detects provider
-  { provider: "anthropic" }
-);
 ```
 
-### 8.5 Graceful Degradation
+### Graceful Degradation
 
-Tất cả DB/Redis operations đều wrap trong try/catch — hệ thống chạy được dù DB/Redis không khả dụng:
-[Redis] Connection error (continuing without cache): connect ECONNREFUSED
-[DB] upsertFinding failed: ... (continuing without persistence)
-[Hub] Embedding search failed: ... (falling back to text search)
+Tất cả DB/Redis operations đều wrapped in try/catch — hệ thống chạy được dù DB/Redis không khả dụng:
+
 ```
-
----
-
-## 9. Deployment
-
-### 9.1 Docker Compose
-    ports:
-      - "3001:3001"
-    environment:
-      DATABASE_URL: postgres://postgres:ar_password_2026@postgres:5432/autoresearch
-      REDIS_URL: redis://:ar_redis_2026@redis:6379
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    depends_on:
-      postgres: { condition: service_healthy }
-      redis: { condition: service_healthy }
+[Redis] Connection error — continuing without cache
+[DB] upsertFinding failed — continuing without persistence
+[Hub] Embedding search failed — falling back to text search
+[Search] Tavily unavailable — LLM fallback mode
 ```
-
-```bash
-# Khởi động
-docker-compose up -d
-
-# Xem logs
-docker-compose logs -f api
-
-# Stop
-docker-compose down
-```
-
-### 9.2 Init Database Schema
-
-Schema tự động init khi API start, hoặc chạy thủ công:
-
-```bash
-psql $DATABASE_URL -f src/schema.sql
-```
-
-### 9.3 Production Checklist
-
-- [ ] Claude API key hợp lệ
-- [ ] PostgreSQL + Redis running
-- [ ] Database schema initialized
-- [ ] OpenAI API key cho embeddings (optional)
-- [ ] Rate limiting configured (Redis)
-- [ ] Logs monitoring set up
-- [ ] Backup strategy cho PostgreSQL
 
 ---
 

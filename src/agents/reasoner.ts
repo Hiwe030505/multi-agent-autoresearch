@@ -18,6 +18,7 @@ import { claudeChat } from "./lib/claude.ts";
 import { config } from "../config.ts";
 import { graphQuery } from "../hub/graph.ts";
 import { emitThinking, emitInsight } from "../hub/events.ts";
+import { parseJson, parseJsonArray, normalizeFields } from "../utils/json.ts";
 import type { Finding, Insight, InsightSession, InsightType } from "../types.ts";
 
 const REASONING_SYSTEM_PROMPT = `Bạn là Reasoning Agent — Senior Research Analyst của nhóm nghiên cứu AI.
@@ -344,37 +345,24 @@ function parseInsightsResponse(
   sessionId: string,
   defaultType: InsightType,
 ): Insight[] {
-  const insights: Insight[] = [];
+  // Try robust JSON array parsing
+  const result = parseJsonArray<Record<string, unknown>>(content);
 
-  // Try to find JSON array
-  const jsonMatch = content.match(/\[[\s\S]*\]/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          insights.push(normalizeInsight(item, sessionId, item.type ?? defaultType));
-        }
-        return insights;
-      }
-    } catch {}
+  if (result.data && result.data.length > 0) {
+    return result.data
+      .map((item) => normalizeFields(item))
+      .map((item) => normalizeInsight(item, sessionId, (item.type as string) ?? defaultType));
   }
 
-  // Try to find JSON objects in the text (one per line)
-  const lines = content.split("\n");
-  for (const line of lines) {
-    const objMatch = line.match(/\{[\s\S]*\}/);
-    if (objMatch) {
-      try {
-        const parsed = JSON.parse(objMatch[0]);
-        if (parsed.title || parsed.summary) {
-          insights.push(normalizeInsight(parsed, sessionId, parsed.type ?? defaultType));
-        }
-      } catch {}
-    }
+  // Fallback: try top-level object with "insights" field
+  const objResult = parseJson<{ insights?: Record<string, unknown>[] }>(content);
+  if (objResult.data?.insights && Array.isArray(objResult.data.insights)) {
+    return objResult.data.insights
+      .map((item) => normalizeFields(item))
+      .map((item) => normalizeInsight(item, sessionId, (item.type as string) ?? defaultType));
   }
 
-  return insights;
+  return [];
 }
 
 function normalizeInsight(raw: any, sessionId: string, type: string): Insight {

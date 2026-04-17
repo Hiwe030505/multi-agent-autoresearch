@@ -19,6 +19,7 @@ import {
   saveAgentOutput,
   getFindingsByTopic,
   getFindingsByIds,
+  getPool,
 } from "./db.ts";
 import {
   sessionPushFinding,
@@ -179,12 +180,55 @@ export async function getHubStats(): Promise<{
   totalInsights: number;
   avgConfidence: number;
   topTopics: Array<{ topic: string; count: number }>;
+  totalSessions: number;
+  totalNodes: number;
+  totalEdges: number;
 }> {
-  // TODO: implement with actual DB queries
-  return {
-    totalFindings: 0,
-    totalInsights: 0,
-    avgConfidence: 0,
-    topTopics: [],
-  };
+  try {
+    const p = getPool();
+    const [
+      findingsCount,
+      insightsCount,
+      avgConf,
+      topTopicsRows,
+      sessionsCount,
+      nodesCount,
+      edgesCount,
+    ] = await Promise.all([
+      p.query(`SELECT COUNT(*) as c FROM findings`),
+      p.query(`SELECT COUNT(*) as c FROM insights`),
+      p.query(`SELECT COALESCE(AVG(confidence), 0) as avg FROM findings`),
+      p.query(`
+        SELECT topic, COUNT(*) as count
+        FROM findings
+        GROUP BY topic
+        ORDER BY count DESC
+        LIMIT 10
+      `),
+      p.query(`SELECT COUNT(*) as c FROM sessions`),
+      p.query(`SELECT COUNT(*) as c FROM graph_nodes`),
+      p.query(`SELECT COUNT(*) as c FROM graph_edges`),
+    ]);
+
+    return {
+      totalFindings: Number(findingsCount.rows[0]?.c ?? 0),
+      totalInsights: Number(insightsCount.rows[0]?.c ?? 0),
+      avgConfidence: Number(avgConf.rows[0]?.avg ?? 0),
+      topTopics: topTopicsRows.rows.map((r) => ({ topic: r.topic, count: Number(r.count) })),
+      totalSessions: Number(sessionsCount.rows[0]?.c ?? 0),
+      totalNodes: Number(nodesCount.rows[0]?.c ?? 0),
+      totalEdges: Number(edgesCount.rows[0]?.c ?? 0),
+    };
+  } catch (e) {
+    console.warn("[Hub] getHubStats failed:", (e as Error).message);
+    return {
+      totalFindings: 0,
+      totalInsights: 0,
+      avgConfidence: 0,
+      topTopics: [],
+      totalSessions: 0,
+      totalNodes: 0,
+      totalEdges: 0,
+    };
+  }
 }

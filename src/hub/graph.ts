@@ -411,11 +411,7 @@ export const graphQuery: GraphQuery = {
         LIMIT 20
       `);
       const { rowToGraphNode } = await import("./db.ts");
-      return rows.map((r) => ({
-        id: r.id, type: r.type as GraphNodeType, name: r.name, summary: r.summary,
-        metadata: r.metadata as GraphNode["metadata"], tags: r.tags ?? [],
-        confidence: r.confidence, createdAt: r.created_at.toISOString(),
-      }));
+      return rows.map(rowToGraphNode);
     } catch {
       return [];
     }
