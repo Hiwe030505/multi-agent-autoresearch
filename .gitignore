@@ -37,3 +37,5 @@ output/
 # Temporary files
 *.tmp
 *.temp
+
+ghp_*
