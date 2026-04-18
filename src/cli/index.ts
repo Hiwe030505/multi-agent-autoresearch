@@ -63,12 +63,25 @@ function spinner(text: string): Ora {
 
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
+// Detect if running as "orin" (shorthand → starts chat immediately)
+// vs "autoresearch" (full CLI with all commands)
+const invokedAs = process.argv[1]?.split("/").pop() ?? "autoresearch";
+const isOrinShort = invokedAs === "orin" && process.argv.length <= 2;
+
 const program = new Command();
 
 program
-  .name("autoresearch")
-  .description("🔬 AutoResearch — Multi-agent autonomous research engine")
+  .name(invokedAs === "orin" ? "orin" : "autoresearch")
+  .description("🔬 ORIN — Multi-agent autonomous research engine")
   .version("1.1.0");
+
+// ─── Default: run chat REPL ────────────────────────────────────────────────────
+// When invoked as bare `orin` with no args → start chat immediately
+if (isOrinShort) {
+  program.action(async () => {
+    await startChat();
+  });
+}
 
 // ─── research command ─────────────────────────────────────────────────────────
 

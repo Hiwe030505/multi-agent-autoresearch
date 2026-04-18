@@ -12,13 +12,13 @@ describe("LLM Client", () => {
   });
 
   describe("Message formatting", () => {
-    it("should handle empty message array gracefully", async () => {
-      // The LLM client handles empty messages by passing them to the provider,
-      // which returns a friendly response rather than throwing.
+    it("should throw on missing API key", async () => {
+      // When no API key is configured, the provider should throw a clear error.
       const { llm } = await import("../../src/llm/client.ts");
-      const result = await llm.chat([], { provider: "kyma" });
-      // Should not throw — provider handles it
-      expect(typeof result.content).toBe("string");
+      // KYMA_API_KEY is not set in test env → should throw
+      await expect(
+        llm.chat([{ role: "user", content: "test" }], { provider: "kyma" }),
+      ).rejects.toThrow("KYMA_API_KEY is not set");
     });
 
     it("should throw on unknown provider", async () => {
