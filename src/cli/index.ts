@@ -76,8 +76,9 @@ program
   .version("1.1.0");
 
 // ─── Default: run chat REPL ────────────────────────────────────────────────────
-// When invoked as bare `orin` with no args → start chat immediately
-if (isOrinShort) {
+// `orin` (bare) or `index.ts` (direct) → start chat REPL immediately
+// `autoresearch` → show help + all commands
+if (isOrinShort || invokedAs === "index.ts") {
   program.action(async () => {
     await startChat();
   });

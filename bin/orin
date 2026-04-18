@@ -1,0 +1,7 @@
+#!/bin/bash
+# ORIN CLI Entry Point
+# Runs from: ~/.nvm/versions/node/v22.22.2/lib/node_modules/autoresearch/bin/orin
+# Project root: ~/.nvm/versions/node/v22.22.2/lib/node_modules/autoresearch/
+PROJECT_DIR="/home/ubuntu/Project/autoresearch"
+cd "$PROJECT_DIR"
+exec ./node_modules/.bin/tsx src/cli/index.ts "$@"

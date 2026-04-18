@@ -15,8 +15,8 @@
     "test:watch": "vitest"
   },
   "bin": {
-    "autoresearch": "./src/cli/index.ts",
-    "orin": "./src/cli/index.ts"
+    "autoresearch": "./bin/orin",
+    "orin": "./bin/orin"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.15",
