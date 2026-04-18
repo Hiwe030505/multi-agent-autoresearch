@@ -39,10 +39,39 @@ export interface Comparison {
   confidence: number;
 }
 
-const SYSTEM_PROMPT = `Bạn là Senior Data Scientist với 15 năm kinh nghiệm.
-Phân tích dữ liệu cẩn thận, đưa ra insights có data-driven.
-Trực quan hóa bằng các chart/table rõ ràng.
-Luôn chỉ ra confidence level và limitations.`;
+const ANALYZE_FINDINGS_PROMPT = `Phân tích các research findings sau để tìm patterns, so sánh approaches, và đưa ra conclusions.
+
+Findings:
+{findingsText}
+
+{focusText}
+
+Trả về JSON object:
+{{
+  "summary": "Tóm tắt 2-3 câu về các patterns chính",
+  "statistics": {{
+    "total_findings": number,
+    "avg_confidence": number,
+    "papers_count": number,
+    "web_sources_count": number
+  }},
+  "visualizations": [
+    {{ "type": "bar|line|pie|table", "title": "Chart title", "data": {{}}, "description": "mô tả" }}
+  ],
+  "comparisons": [
+    {{
+      "subjectA": "approach A",
+      "subjectB": "approach B",
+      "metric": "accuracy|speed|cost|...",
+      "valueA": number,
+      "valueB": number,
+      "winner": "A|B|tie",
+      "confidence": 0.0-1.0
+    }}
+  ],
+  "conclusions": ["key takeaway 1", "key takeaway 2"],
+  "quality": 0.0-1.0
+}}`;
 
 export async function analyzeFindings(
   findings: Finding[],
@@ -60,47 +89,16 @@ export async function analyzeFindings(
     ].filter(Boolean).join("\n"))
     .join("\n\n");
 
+  const focusText = focus ? `FOCUS: ${focus}` : "";
+
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Analyze these research findings${focus ? ` with focus on: ${focus}` : ""}.
-
-Findings:
-${findingsText}
-
-Return a JSON object:
-{
-  "summary": "2-3 sentence overview of key patterns across findings",
-  "statistics": {
-    "total_findings": number,
-    "avg_confidence": number,
-    "papers_count": number,
-    "web_sources_count": number
-  },
-  "visualizations": [
-    {
-      "type": "bar|line|pie|table",
-      "title": "Chart title",
-      "data": {},
-      "description": "what this visualization shows"
-    }
-  ],
-  "comparisons": [
-    {
-      "subjectA": "approach A",
-      "subjectB": "approach B",
-      "metric": "accuracy|speed|cost|...",
-      "valueA": number,
-      "valueB": number,
-      "winner": "A|B|tie",
-      "confidence": 0.0-1.0
-    }
-  ],
-  "conclusions": ["key takeaway 1", "key takeaway 2"],
-  "quality": 0.0-1.0
-}`,
+      content: ANALYZE_FINDINGS_PROMPT
+        .replace("{findingsText}", findingsText)
+        .replace("{focusText}", focusText),
     }],
-    SYSTEM_PROMPT,
+    "Bạn là Senior Data Scientist. Phân tích dữ liệu cẩn thận, đưa ra data-driven insights. Luôn chỉ ra confidence level và limitations.",
     config.models.analyst,
     4096,
   );
@@ -121,22 +119,22 @@ export async function compareApproaches(
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Compare these approaches and rank them.
+      content: `So sánh và rank các approaches sau.
 
 Approaches:
 ${approachesText}
 
-Return a JSON object:
+Trả về JSON object:
 {
   "ranking": [
-    {"name": "approach name", "score": 0-100, "reasoning": "why this approach scored this way"}
+    {"name": "approach name", "score": 0-100, "reasoning": "tại sao approach này được score như vậy"}
   ],
   "radarData": {
-    "metric_name": [score1, score2, ...]  // normalized 0-100 for radar chart
+    "metric_name": [score1, score2, ...]
   }
 }`,
     }],
-    SYSTEM_PROMPT,
+    "Bạn là Senior Data Scientist. So sánh và rank các approaches dựa trên metrics một cách công bằng.",
     config.models.analyst,
     2048,
   );
@@ -161,14 +159,12 @@ export async function generateBenchmarkReport(
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Generate a markdown benchmark comparison report.
+      content: `Tạo benchmark comparison report bằng markdown với tables và analysis.
 
 Benchmarks:
-${benchmarks.map((b) => `- ${b.name} on ${b.dataset}: ${b.value} ${b.unit} (${b.metric})`).join("\n")}
-
-Generate a well-formatted markdown report with tables and analysis.`,
+${benchmarks.map((b) => `- ${b.name} on ${b.dataset}: ${b.value} ${b.unit} (${b.metric})`).join("\n")}`,
     }],
-    SYSTEM_PROMPT,
+    "Bạn là Senior Data Scientist. Tạo benchmark report rõ ràng, có tables và analysis.",
     config.models.analyst,
     2048,
   );

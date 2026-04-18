@@ -264,8 +264,10 @@ export async function runResearchPipeline(
     const reviewResult = await reviewInsights(insights, allFindings);
     console.log(`[Orchestrator] Review: score=${reviewResult.score}/100, approved=${reviewResult.approved}, issues=${reviewResult.issues.length}`);
 
+    // ── selfReview: filter weak/generic insights ──────────────────────────────
+    const selfReviewedInsights = await selfReview(allFindings, insights);
     const verifiedInsights = reviewResult.approved
-      ? insights.insights
+      ? selfReviewedInsights                      // Apply both reviewer + self-review
       : insights.insights.map((insight) => ({ ...insight, verified: false }));
 
     // Attach review feedback to session
@@ -320,19 +322,20 @@ export async function decomposeTask(topic: string): Promise<Task[]> {
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Decompose this research topic into 3-5 specific subtasks that should be executed sequentially.
+      content: `Phân tích research topic sau và break down thành 3-5 subtasks cụ thể để thực thi.
 
-Topic: ${topic}
+TOPIC: ${topic}
 
-For each subtask, specify:
-1. title: short name
-2. description: what to research specifically
+Mỗi subtask cần có:
+1. title: tên ngắn gọn
+2. description: mô tả cụ thể cần research gì
 3. type: "research" | "analysis" | "implementation" | "writing"
-4. priority: 1 (high) to 3 (low)
+4. priority: 1 (cao) đến 3 (thấp)
+5. WHY: tại sao subtask này cần thiết
 
-Return JSON array of subtasks.`,
+Trả về JSON array các subtasks.`,
     }],
-    "You are a project manager. Break down research topics into clear, actionable subtasks.",
+    "Bạn là Senior Research Project Manager. Break down research topics thành các subtasks cụ thể, có thể thực thi được.",
     config.models.orchestrator,
     1024,
   );

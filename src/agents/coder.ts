@@ -27,6 +27,8 @@ Bạn viết code sạch, hiệu quả, có documentation, và có unit tests.
 Luôn tuân thủ best practices cho từng ngôn ngữ.
 Code phải production-ready, không phải prototype.`;
 
+// ─── Prompt Templates ─────────────────────────────────────────────────────────
+
 const CODE_GENERATION_PROMPT = `You are generating production-ready code based on research findings.
 
 Research context:
@@ -54,6 +56,40 @@ IMPORTANT:
 - Handle errors gracefully
 - Write actual runnable code, not pseudocode`;
 
+const CODE_REVIEW_PROMPT = `You are a senior code reviewer. Be thorough, specific, and constructive.
+
+Review this {language} code for correctness, style, security, and performance issues.
+
+Code:
+\`\`\`{language}
+{code}
+\`\`\`
+
+Return a JSON object:
+{{
+  "issues": ["list of specific issues found"],
+  "suggestions": ["list of specific improvement suggestions"],
+  "score": 0-100 overall quality score
+}}`;
+
+const CODE_DEBUG_PROMPT = `You are a senior software engineer debugging code.
+
+Debug and fix this {language} code that has an error.
+
+Error message:
+{error}
+
+Code:
+\`\`\`{language}
+{code}
+\`\`\`
+
+Return a JSON object:
+{{
+  "fixedCode": "corrected code",
+  "explanation": "root cause of the error and what was fixed"
+}}`;
+
 export async function generateCode(
   task: string,
   findings: Finding[] = [],
@@ -68,7 +104,7 @@ export async function generateCode(
   const response = await claudeChat(
     [{
       role: "user",
-      content: CODE_GENERATION_TEMPLATE
+      content: CODE_GENERATION_PROMPT
         .replace("{research_context}", researchCtx || "No specific research context")
         .replace("{task}", task)
         .replace("{language}", language)
@@ -83,34 +119,6 @@ export async function generateCode(
   return parsed;
 }
 
-const CODE_GENERATION_TEMPLATE = `You are generating production-ready code based on research findings.
-
-Research context:
-{research_context}
-
-Task: {task}
-Language preference: {language}
-Additional requirements: {requirements}
-
-Output a JSON object with the following structure:
-{
-  "code": "full code implementation",
-  "language": "python|typescript|go|rust",
-  "explanation": "how the code works and why this approach was chosen",
-  "tests": "corresponding unit tests (if applicable)",
-  "files": [
-    {"name": "filename.ext", "content": "file content"}
-  ],
-  "quality": 0.0-1.0 confidence in correctness
-}
-
-IMPORTANT:
-- Include all imports and dependencies
-- Add inline comments for complex logic
-- Handle errors gracefully
-- Write actual runnable code, not pseudocode
-- Code must be production-ready`;
-
 export async function reviewCode(
   code: string,
   language = "python",
@@ -118,19 +126,9 @@ export async function reviewCode(
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Review this ${language} code for correctness, style, security, and performance issues.
-
-Code:
-\`\`\`${language}
-${code}
-\`\`\`
-
-Return a JSON object:
-{
-  "issues": ["list of specific issues found"],
-  "suggestions": ["list of specific improvement suggestions"],
-  "score": 0-100 overall quality score
-}`,
+      content: CODE_REVIEW_PROMPT
+        .replace("{language}", language)
+        .replace("{code}", code),
     }],
     "You are a senior code reviewer. Be thorough, specific, and constructive.",
     config.models.coder,
@@ -160,21 +158,10 @@ export async function debugAndFix(
   const response = await claudeChat(
     [{
       role: "user",
-      content: `Debug and fix this ${language} code that has an error.
-
-Error message:
-${error}
-
-Code:
-\`\`\`${language}
-${code}
-\`\`\`
-
-Return a JSON object:
-{
-  "fixedCode": "corrected code",
-  "explanation": "root cause of the error and what was fixed"
-}`,
+      content: CODE_DEBUG_PROMPT
+        .replace("{language}", language)
+        .replace("{error}", error)
+        .replace("{code}", code),
     }],
     "You are a senior software engineer debugging code.",
     config.models.coder,

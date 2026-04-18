@@ -5,24 +5,30 @@ import { webSearch } from "../hub/search.ts";
 import { parseJson } from "../utils/json.ts";
 import type { Finding, KeyFinding, SourceType } from "../types.ts";
 
-const PAPER_SUMMARY_PROMPT = `You are summarizing research sources for a research team.
+const PAPER_SUMMARY_PROMPT = `Bạn là Research Analyst — trích xuất thông tin cụ thể, có thể kiểm chứng từ research sources.
 
-Title: {title}
-Source URL: {url}
-Content/snippets: {content}
+TITLE: {title}
+SOURCE URL: {url}
+CONTENT/SNIPPETS: {content}
 
-Extract and summarize in JSON format:
+QUY TẮC TRÍCH XUẤT:
+1. CHỈ trích xuất thông tin CÓ TRONG source — không bịa đặt
+2. Mỗi key_finding phải có: finding + evidence cụ thể + confidence score
+3. Confidence: 0.0-1.0 (0.9 = rất chắc chắn, 0.5 = có thể đúng, 0.2 = highly speculative)
+4. Đặt câu hỏi (questions_raised) mà source KHÔNG trả lời được
+
+OUTPUT JSON:
 {{
-  "title": "cleaned title",
+  "title": "Tiêu đề đã clean",
   "key_findings": [
-    {{ "finding": "specific finding", "evidence": "specific evidence from source", "confidence": 0.0-1.0 }}
+    {{ "finding": "Mô tả cụ thể về phát hiện", "evidence": "Trích dẫn chính xác từ source", "confidence": 0.0-1.0 }}
   ],
-  "summary": "2-3 sentence summary of the main contribution",
-  "questions_raised": ["question raised by this source"],
+  "summary": "Tóm tắt 2-3 câu về contribution chính",
+  "questions_raised": ["Câu hỏi mà source không trả lời được"],
   "source_type": "paper|web"
 }}
 
-Focus on specific, verifiable claims. Do not invent details not present in the content.`;
+QUAN TRỌNG: Không bịa đặt thông tin không có trong source.`;
 
 export interface ResearchResult {
   sources: Finding[];
@@ -97,7 +103,7 @@ async function summarizeSource(
 
   const response = await claudeChat(
     [{ role: "user", content: prompt }],
-    "You are a precise research analyst. Extract factual information only. Do not invent or hallucinate details.",
+    "Bạn là Research Analyst chính xác. CHỈ trích xuất thông tin thực sự có trong source. Không bịa đặt hay hallucinate.",
     config.models.research,
     2048,
   );
@@ -192,7 +198,7 @@ Format as JSON:
   "questions_raised": ["..."]
 }`,
     }],
-    "You are a research analyst. Be precise about what is factual vs speculative.",
+    "Bạn là Research Analyst. Phân biệt rõ giữa KNOWN FACTS, INFERRED PATTERNS, và SPECULATIVE. Không bịa đặt.",
     config.models.research,
     2048,
   );
