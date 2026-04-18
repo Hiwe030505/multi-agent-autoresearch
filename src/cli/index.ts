@@ -25,6 +25,8 @@ import { getPool } from "../hub/db.ts";
 import { listSessions, getSessionDetail } from "./sessions.ts";
 import { formatTerminal, formatMarkdown, formatHTML } from "./formatters.ts";
 import { loadConfig } from "./config.ts";
+import { printLogo, printMiniLogo } from "./logo.ts";
+import { startChat } from "./repl.ts";
 import type { InsightSession } from "../types.ts";
 
 // ─── Load .env manually ───────────────────────────────────────────────────────
@@ -214,16 +216,14 @@ configCmd
     }
   });
 
-// ─── Interactive mode ─────────────────────────────────────────────────────────
+// ─── chat command ───────────────────────────────────────────────────────────────
 
 program
-  .command("interactive", { hidden: true })
+  .command("chat")
   .alias("i")
-  .description("Start interactive research wizard")
+  .description("Start the ORIN interactive chat REPL")
   .action(async () => {
-    console.log(chalk.blue.bold("\n🔬 AutoResearch Interactive Mode"));
-    console.log(chalk.gray("(Not yet implemented — use: autoresearch research \"<topic>\")"));
-    console.log("");
+    await startChat();
   });
 
 // ─── Command Implementations ───────────────────────────────────────────────────
@@ -818,6 +818,9 @@ async function saveOutput(
 }
 
 // ─── Run ──────────────────────────────────────────────────────────────────────
+
+const showLogo = !process.argv.includes("--no-logo");
+if (showLogo) printLogo();
 
 program.parseAsync(process.argv).catch((e) => {
   console.error(chalk.red(`Error: ${e}`));

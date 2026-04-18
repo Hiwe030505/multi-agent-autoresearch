@@ -8,10 +8,15 @@
     "dev:agents": "tsx watch src/agents/run-all.ts",
     "cli": "tsx src/cli/index.ts",
     "dev:cli": "tsx watch src/cli/index.ts",
-    "test": "bun test"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit/",
+    "test:api": "vitest run tests/api/",
+    "test:e2e": "vitest run tests/e2e/",
+    "test:watch": "vitest"
   },
   "bin": {
-    "autoresearch": "./src/cli/index.ts"
+    "autoresearch": "./src/cli/index.ts",
+    "orin": "./src/cli/index.ts"
   },
   "dependencies": {
     "@huggingface/inference": "^4.13.15",
@@ -41,6 +46,7 @@
     "@types/pg": "^8.11.10",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.4"
   }
 }

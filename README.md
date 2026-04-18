@@ -1,5 +1,17 @@
 # AutoResearch — Multi-Agent Research Engine
 
+  ┌────────────────────────────────────────────────────────────────────┐
+  │         ████████████ ████████████ █████ ███     ███                │
+  │         ████    ████ ████    ████  ███  █████   ███                │
+  │         ████    ████ ████████████  ███  ███  ██ ███                │
+  │         ████    ████ ████  ████    ███  ███   █████                │
+  │         ████████████ ████    ████ █████ ███     ███                │
+  │                                                                    │
+  │       M U L T I - A G E N T   R E S E A R C H   E N G I N E        │
+  └────────────────────────────────────────────────────────────────────┘
+
+  Multi-Agent Research Engine  ·  7 Specialized AI Agents  ·  Powered by AI
+
 > Hệ thống nghiên cứu tự động với 7 AI agent chuyên môn, tương tự nhóm Senior Research Team. Giao diện: **Claude CLI-style chatbot** + **Enhanced CLI** với real-time streaming.
 
 ## TL;DR — Quick Start
